@@ -3,52 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Retro Tank Battle - Vibe Coding Final</title>
+    <title>Retro Tank Battle - Bullet Intercept Edition</title>
     <style>
-        body {
-            background-color: #222;
-            color: white;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        canvas {
-            background-color: #000;
-            border: 4px solid #555;
-            box-shadow: 0 0 30px rgba(0,0,0,0.8);
-            cursor: crosshair;
-        }
+        body { background-color: #222; color: white; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        canvas { background-color: #000; border: 4px solid #555; box-shadow: 0 0 30px rgba(0,0,0,0.8); cursor: crosshair; }
         .ui { margin-bottom: 10px; font-size: 24px; text-shadow: 2px 2px #000; }
         .hint { margin-top: 10px; color: #aaa; font-size: 14px; }
     </style>
 </head>
 <body>
-
     <div class="ui">SCORE: <span id="score">0</span></div>
     <canvas id="gameCanvas" width="600" height="600"></canvas>
-    <div class="hint">WASD 移动 | 空格 射击 | 点击画布开启音效</div>
+    <div class="hint">WASD 移动 | 空格 射击 | 子弹可抵消敌人子弹 | ENTER 重开</div>
 
 <script>
-/**
- * 坦克大战 - Vibe Coding 最终完整版
- * 包含：AI、碰撞、粒子爆炸、8-bit合成音效、计分系统
- */
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
-
-// --- 核心配置 ---
 const TILE_SIZE = 40;
 const PLAYER_SPEED = 3;
 const ENEMY_SPEED = 1.5;
 const BULLET_SPEED = 6;
-
-// --- 游戏状态 ---
 let isGameOver = false;
 let score = 0;
 let spawnTimer = 0;
@@ -58,27 +33,21 @@ let enemies = [];
 let enemyBullets = [];
 let particles = [];
 let walls = [];
-
-// --- 音效引擎 (Web Audio API) ---
 let audioCtx = null;
-function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
+function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 function playSound(type) {
     if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
+    osc.connect(gain); gain.connect(audioCtx.destination);
     if (type === 'fire') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.type = 'square'; osc.frequency.setValueAtTime(600, audioCtx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
         gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
         osc.start(); osc.stop(audioCtx.currentTime + 0.1);
     } else if (type === 'exp') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
         osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.2);
         gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
@@ -86,43 +55,26 @@ function playSound(type) {
     }
 }
 
-// --- 初始化地图 ---
 function initMap() {
     walls = [
-        // 随机分布一些墙
         {x: 80, y: 80, type: 0}, {x: 120, y: 80, type: 0}, {x: 440, y: 80, type: 0}, {x: 480, y: 80, type: 0},
         {x: 240, y: 160, type: 1}, {x: 280, y: 160, type: 1}, {x: 320, y: 160, type: 1},
         {x: 80, y: 320, type: 0}, {x: 80, y: 360, type: 0}, {x: 480, y: 320, type: 0}, {x: 480, y: 360, type: 0},
         {x: 200, y: 320, type: 1}, {x: 360, y: 320, type: 1},
-        // 基地护盾
-        {x: 240, y: 560, type: 0}, {x: 240, y: 520, type: 0}, {x: 280, y: 520, type: 0}, 
-        {x: 320, y: 520, type: 0}, {x: 320, y: 560, type: 0}
+        {x: 240, y: 560, type: 0}, {x: 240, y: 520, type: 0}, {x: 280, y: 520, type: 0}, {x: 320, y: 520, type: 0}, {x: 320, y: 560, type: 0}
     ];
 }
 
-// --- 输入检测 ---
 let keys = {};
 window.onkeydown = (e) => { initAudio(); keys[e.code] = true; if(isGameOver && e.code === 'Enter') resetGame(); };
 window.onkeyup = (e) => keys[e.code] = false;
 
-function resetGame() {
-    score = 0; scoreEl.innerText = 0;
-    isGameOver = false;
-    enemies = []; enemyBullets = []; particles = [];
-    player.x = 160; player.y = 520; player.bullets = [];
-    base.alive = true;
-    initMap();
-}
+function resetGame() { score = 0; scoreEl.innerText = 0; isGameOver = false; enemies = []; enemyBullets = []; particles = []; player.x = 160; player.y = 520; player.bullets = []; base.alive = true; initMap(); }
 
-// --- 物理逻辑 ---
 function createExplosion(x, y, color) {
     playSound('exp');
-    for (let i = 0; i < 15; i++) {
-        particles.push({
-            x: x + 16, y: y + 16,
-            vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6,
-            life: 20, color: color, size: Math.random() * 4 + 2
-        });
+    for (let i = 0; i < 12; i++) {
+        particles.push({ x: x, y: y, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6, life: 15, color: color, size: Math.random() * 3 + 1 });
     }
 }
 
@@ -132,10 +84,26 @@ function checkCollision(nx, ny, w, h) {
     return hitWall || hitBase;
 }
 
+// --- ✨ 新增：子弹对撞检测逻辑 ---
+function checkBulletInterception() {
+    for (let i = player.bullets.length - 1; i >= 0; i--) {
+        let pb = player.bullets[i];
+        for (let j = enemyBullets.length - 1; j >= 0; j--) {
+            let eb = enemyBullets[j];
+            // 计算两颗子弹之间的距离，如果小于 8 像素则判定为对撞
+            let dist = Math.hypot(pb.x - eb.x, pb.y - eb.y);
+            if (dist < 10) {
+                createExplosion(pb.x, pb.y, '#FFFFFF'); // 产生白色火花
+                player.bullets.splice(i, 1);
+                enemyBullets.splice(j, 1);
+                break; // 跳出内层循环，处理下一颗玩家子弹
+            }
+        }
+    }
+}
+
 function update() {
     if (isGameOver) return;
-
-    // 1. 玩家移动
     let nx = player.x, ny = player.y;
     if (keys['KeyW']) { ny -= PLAYER_SPEED; player.dir = 'up'; }
     else if (keys['KeyS']) { ny += PLAYER_SPEED; player.dir = 'down'; }
@@ -149,132 +117,69 @@ function update() {
 
     if (keys['Space'] && player.bullets.length < 2) {
         player.bullets.push({ x: player.x + 16, y: player.y + 16, dir: player.dir });
-        playSound('fire');
-        keys['Space'] = false;
+        playSound('fire'); keys['Space'] = false;
     }
 
-    // 2. 敌人 AI
     if (enemies.length < 4 && spawnTimer-- <= 0) {
         enemies.push({ x: Math.random() * 560, y: 0, w: 32, h: 32, dir: 'down', color: '#FF4444', moveTimer: 0, fireTimer: 60 });
         spawnTimer = 120;
     }
 
     enemies.forEach(en => {
-        if (en.moveTimer-- <= 0) {
-            en.dir = ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)];
-            en.moveTimer = 60;
-        }
+        if (en.moveTimer-- <= 0) { en.dir = ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)]; en.moveTimer = 60; }
         let ex = en.x, ey = en.y;
-        if (en.dir === 'up') ey -= ENEMY_SPEED;
-        if (en.dir === 'down') ey += ENEMY_SPEED;
-        if (en.dir === 'left') ex -= ENEMY_SPEED;
-        if (en.dir === 'right') ex += ENEMY_SPEED;
-
-        if (!checkCollision(ex, ey, en.w, en.h)) {
-            en.x = Math.max(0, Math.min(canvas.width - en.w, ex));
-            en.y = Math.max(0, Math.min(canvas.height - en.h, ey));
-        } else { en.moveTimer = 0; }
-
-        if (en.fireTimer-- <= 0) {
-            enemyBullets.push({ x: en.x + 16, y: en.y + 16, dir: en.dir });
-            en.fireTimer = 120;
-        }
+        if (en.dir === 'up') ey -= ENEMY_SPEED; if (en.dir === 'down') ey += ENEMY_SPEED; if (en.dir === 'left') ex -= ENEMY_SPEED; if (en.dir === 'right') ex += ENEMY_SPEED;
+        if (!checkCollision(ex, ey, en.w, en.h)) { en.x = Math.max(0, Math.min(canvas.width - en.w, ex)); en.y = Math.max(0, Math.min(canvas.height - en.h, ey)); } else { en.moveTimer = 0; }
+        if (en.fireTimer-- <= 0) { enemyBullets.push({ x: en.x + 16, y: en.y + 16, dir: en.dir }); en.fireTimer = 120; }
     });
 
-    // 3. 子弹与粒子更新
-    handleBullets(player.bullets, true);
+    checkBulletInterception(); // 执行对撞检查
+    handleBullets(player.bullets, true); 
     handleBullets(enemyBullets, false);
+    
     particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life--; if(p.life <= 0) particles.splice(i, 1); });
 }
 
 function handleBullets(bullets, isPlayer) {
     for (let i = bullets.length - 1; i >= 0; i--) {
         let b = bullets[i];
-        if (b.dir === 'up') b.y -= BULLET_SPEED;
-        if (b.dir === 'down') b.y += BULLET_SPEED;
-        if (b.dir === 'left') b.x -= BULLET_SPEED;
-        if (b.dir === 'right') b.x += BULLET_SPEED;
-
+        if (b.dir === 'up') b.y -= BULLET_SPEED; else if (b.dir === 'down') b.y += BULLET_SPEED; else if (b.dir === 'left') b.x -= BULLET_SPEED; else if (b.dir === 'right') b.x += BULLET_SPEED;
         if (b.x < 0 || b.x > 600 || b.y < 0 || b.y > 600) { bullets.splice(i, 1); continue; }
-
-        // 击中墙壁
+        
         for (let j = walls.length - 1; j >= 0; j--) {
             let w = walls[j];
             if (b.x > w.x && b.x < w.x + TILE_SIZE && b.y > w.y && b.y < w.y + TILE_SIZE) {
-                if (w.type === 0) { walls.splice(j, 1); createExplosion(w.x, w.y, '#AA4400'); }
+                if (w.type === 0) { walls.splice(j, 1); createExplosion(w.x + 16, w.y + 16, '#AA4400'); }
                 bullets.splice(i, 1); break;
             }
         }
         
-        // 击中基地
-        if (base.alive && b.x > base.x && b.x < base.x + base.w && b.y > base.y && b.y < base.y + base.h) {
-            base.alive = false; isGameOver = true; createExplosion(base.x, base.y, '#00FF00');
-        }
-
+        if (base.alive && b.x > base.x && b.x < base.x + base.w && b.y > base.y && b.y < base.y + base.h) { base.alive = false; isGameOver = true; createExplosion(base.x + 20, base.y + 20, '#0F0'); }
         if (isPlayer) {
-            enemies.forEach((en, ei) => {
-                if (b.x > en.x && b.x < en.x + en.w && b.y > en.y && b.y < en.y + en.h) {
-                    createExplosion(en.x, en.y, '#F00'); enemies.splice(ei, 1); bullets.splice(i, 1);
-                    score += 100; scoreEl.innerText = score;
-                }
-            });
+            enemies.forEach((en, ei) => { if (b.x > en.x && b.x < en.x + en.w && b.y > en.y && b.y < en.y + en.h) { createExplosion(en.x + 16, en.y + 16, '#F00'); enemies.splice(ei, 1); bullets.splice(i, 1); score += 100; scoreEl.innerText = score; } });
         } else {
-            if (b.x > player.x && b.x < player.x + player.w && b.y > player.y && b.y < player.y + player.h) {
-                isGameOver = true; createExplosion(player.x, player.y, player.color);
-            }
+            if (b.x > player.x && b.x < player.x + player.w && b.y > player.y && b.y < player.y + player.h) { isGameOver = true; createExplosion(player.x + 16, player.y + 16, player.color); }
         }
     }
 }
 
-// --- 渲染引擎 ---
 function drawTank(t) {
-    ctx.fillStyle = t.color;
-    ctx.fillRect(t.x, t.y, t.w, t.h);
-    ctx.fillStyle = '#FFF';
-    if (t.dir === 'up') ctx.fillRect(t.x + 12, t.y - 8, 8, 12);
-    if (t.dir === 'down') ctx.fillRect(t.x + 12, t.y + 28, 8, 12);
-    if (t.dir === 'left') ctx.fillRect(t.x - 8, t.y + 12, 12, 8);
-    if (t.dir === 'right') ctx.fillRect(t.x + 28, t.y + 12, 12, 8);
+    ctx.fillStyle = t.color; ctx.fillRect(t.x, t.y, t.w, t.h); ctx.fillStyle = '#FFF';
+    if (t.dir === 'up') ctx.fillRect(t.x + 12, t.y - 8, 8, 12); else if (t.dir === 'down') ctx.fillRect(t.x + 12, t.y + 28, 8, 12); else if (t.dir === 'left') ctx.fillRect(t.x - 8, t.y + 12, 12, 8); else if (t.dir === 'right') ctx.fillRect(t.x + 28, t.y + 12, 12, 8);
 }
 
 function draw() {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 600, 600);
-    
-    // 背景网格
-    ctx.strokeStyle = '#111';
-    for(let i=0; i<600; i+=TILE_SIZE) { ctx.strokeRect(i, 0, 1, 600); ctx.strokeRect(0, i, 600, 1); }
-
-    walls.forEach(w => {
-        ctx.fillStyle = w.type === 0 ? '#AA4400' : '#777';
-        ctx.fillRect(w.x + 2, w.y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
-    });
-
-    if (base.alive) {
-        ctx.fillStyle = '#0F0';
-        ctx.beginPath(); ctx.moveTo(base.x + 20, base.y + 5); ctx.lineTo(base.x + 5, base.y + 35); ctx.lineTo(base.x + 35, base.y + 35); ctx.fill();
-    }
-
-    if (!isGameOver) drawTank(player);
-    enemies.forEach(en => drawTank(en));
-
-    ctx.fillStyle = '#FFF';
-    player.bullets.concat(enemyBullets).forEach(b => ctx.fillRect(b.x - 2, b.y - 2, 5, 5));
+    ctx.strokeStyle = '#111'; for(let i=0; i<600; i+=TILE_SIZE) { ctx.strokeRect(i, 0, 1, 600); ctx.strokeRect(0, i, 600, 1); }
+    walls.forEach(w => { ctx.fillStyle = w.type === 0 ? '#AA4400' : '#777'; ctx.fillRect(w.x + 2, w.y + 2, TILE_SIZE - 4, TILE_SIZE - 4); });
+    if (base.alive) { ctx.fillStyle = '#0F0'; ctx.beginPath(); ctx.moveTo(base.x + 20, base.y + 5); ctx.lineTo(base.x + 5, base.y + 35); ctx.lineTo(base.x + 35, base.y + 35); ctx.fill(); }
+    if (!isGameOver) drawTank(player); enemies.forEach(en => drawTank(en));
+    ctx.fillStyle = '#FFF'; player.bullets.concat(enemyBullets).forEach(b => ctx.fillRect(b.x - 2, b.y - 2, 5, 5));
     particles.forEach(p => { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); });
-
-    if (isGameOver) {
-        ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, 0, 600, 600);
-        ctx.fillStyle = '#F00'; ctx.font = '40px Courier'; ctx.textAlign = 'center';
-        ctx.fillText("GAME OVER", 300, 280);
-        ctx.fillStyle = '#FFF'; ctx.font = '20px Courier';
-        ctx.fillText("Press ENTER to Restart", 300, 330);
-    }
-
+    if (isGameOver) { ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, 0, 600, 600); ctx.fillStyle = '#F00'; ctx.font = '40px Courier'; ctx.textAlign = 'center'; ctx.fillText("GAME OVER", 300, 280); ctx.fillStyle = '#FFF'; ctx.font = '20px Courier'; ctx.fillText("Press ENTER to Restart", 300, 330); }
     requestAnimationFrame(() => { update(); draw(); });
 }
-
-initMap();
-draw();
+initMap(); draw();
 </script>
 </body>
-
 </html>
